@@ -45,12 +45,26 @@ If Google Chat virtualizes the message list and removes previously viewed messag
 ## Technical shape
 
 - `manifest.json`: Manifest V3 permissions, service worker, Gmail/Chat matches, and `all_frames` injection
-- `src/content-script.js`: chat-root detection, session extraction, notification UI
+- `src/content-script.js`: chat-root detection, frame-scoped session extraction, notification UI
 - `src/service-worker.js`: context menu registration, frame-targeted messaging, and download creation
 - `src/markdown.js`: pure DOM-to-record and record-to-Markdown functions
 - `tests/markdown.test.js`: Node test coverage for formatting and sanitization
 
 Minimal permissions are preferred: `contextMenus`, `downloads`, and `activeTab`. The content script is limited to Gmail and Google Chat host patterns.
+
+## Current extraction strategy
+
+Each message candidate is extracted independently inside the chat root associated with the context-menu event. Sender and timestamp metadata are collected separately from the message body.
+
+Body extraction is evidence-ranked:
+
+1. Semantic markers (`data-message-text` and `data-message-content`) are preferred.
+2. Known Google Chat message-body classes (`GDhqjd`, `vdlEi`, `iOHNLd`, `TVitee`, and `jU4nEd`) are compatibility hints based on the public reference implementation.
+3. If no marked body is available, visible `[dir="auto"]` candidates and text leaves are ranked after removing timestamps, sender labels, buttons, reactions, accessibility-only labels, and duplicate ancestor text.
+
+The extractor never treats the first `[dir="auto"]` element as the body by default. This is important because that node can be sender metadata. The frame-targeted request and active chat-root boundary remain unchanged, and the extractor does not scroll or query the Google Chat API.
+
+The semantic and class-based paths are covered by redacted DOM fixtures. A live authenticated Chrome DOM was not available for attachment during the latest verification, so selector compatibility should be rechecked manually after loading the extension in the user's current Chrome session. Report only frame metadata, selector counts, dimensions, and redacted tag/class/attribute shapes; do not copy chat text, cookies, or storage.
 
 ## Acceptance criteria
 

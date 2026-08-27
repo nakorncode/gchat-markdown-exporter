@@ -2,7 +2,37 @@
   "use strict";
 
   const markdown = globalThis.GchatMarkdown;
-  const MESSAGE_SELECTOR = "[data-message-id], [data-message-text], [data-message-content], [role='article'], [role='listitem']";
+  const MESSAGE_SELECTOR = "[data-message-id], [data-message-text], [data-message-content], [role='article'], [role='listitem'], div.nF6pT, div.GDhqjd, div.vdlEi";
+  const MESSAGE_BODY_SELECTORS = [
+    "[data-message-text]",
+    "[data-message-content]",
+    "div.GDhqjd",
+    "div.vdlEi",
+    "div.iOHNLd",
+    "div.TVitee",
+    "div.jU4nEd"
+  ];
+  const METADATA_SELECTOR = [
+    "script",
+    "style",
+    "noscript",
+    "template",
+    "button",
+    "input",
+    "textarea",
+    "[contenteditable]",
+    "[aria-hidden='true']",
+    "[role='button']",
+    "time",
+    "[data-sender-name]",
+    "[data-author-name]",
+    "[data-absolute-timestamp]",
+    "[aria-label*='sent by' i]",
+    "[aria-label*='from ' i]",
+    "[aria-label*='reaction' i]",
+    "[aria-label*='message action' i]",
+    "[aria-label*='more action' i]"
+  ].join(",");
   const CHAT_ROOT_HINT_SELECTOR = "#c61 .CjZXwd, #c61, [data-conversation-view], [aria-label*='conversation' i], [aria-label*='chat' i], [role='main'], main";
   let lastContextRoot = null;
   let lastSelection = "";
@@ -22,9 +52,112 @@
   function visibleText(element) {
     if (!element) return "";
     const clone = element.cloneNode(true);
-    clone.querySelectorAll("script, style, noscript, template, button, input, textarea, [contenteditable], [aria-hidden='true'], [role='button']")
+    clone.querySelectorAll(METADATA_SELECTOR)
       .forEach((node) => node.remove());
     return markdown.normalizeWhitespace(clone.innerText || clone.textContent || "");
+  }
+
+  function directText(element) {
+    if (!element) return "";
+    return markdown.normalizeWhitespace(Array.from(element.childNodes)
+      .filter((node) => node.nodeType === Node.TEXT_NODE)
+      .map((node) => node.nodeValue || "")
+      .join(" "));
+  }
+
+  function selectorMatches(element, selector) {
+    const matches = [];
+    if (element.matches(selector)) matches.push(element);
+    matches.push(...element.querySelectorAll(selector));
+    return matches;
+  }
+
+  function collectMetadataTexts(element, sender, sentAt) {
+    const values = new Set([sender, sentAt].filter(Boolean).map((value) => markdown.normalizeWhitespace(value)));
+    const selectors = [
+      "[data-sender-name]",
+      "[data-author-name]",
+      "time",
+      "[data-absolute-timestamp]",
+      "[aria-label*='sent by' i]",
+      "[aria-label*='from ' i]"
+    ];
+    for (const selector of selectors) {
+      for (const node of selectorMatches(element, selector)) {
+        const text = visibleText(node);
+        const ariaLabel = markdown.normalizeWhitespace(node.getAttribute("aria-label"));
+        const dataSender = markdown.normalizeWhitespace(node.getAttribute("data-sender-name"));
+        const dataAuthor = markdown.normalizeWhitespace(node.getAttribute("data-author-name"));
+        [text, ariaLabel, dataSender, dataAuthor].filter(Boolean).forEach((value) => values.add(value));
+      }
+    }
+    return values;
+  }
+
+  function isMetadataOnlyText(text, metadataTexts) {
+    const normalized = markdown.normalizeWhitespace(text);
+    if (!normalized) return true;
+    if (metadataTexts.has(normalized)) return true;
+    return /^(add reaction|more actions?|reply in thread|quote in reply|edit|delete|copy link)$/i.test(normalized);
+  }
+
+  function bodyCandidateText(element) {
+    return visibleText(element);
+  }
+
+  function chooseBodyCandidate(candidates, metadataTexts) {
+    const seen = new Set();
+    const usable = candidates.map((element, index) => {
+      if (!isVisible(element)) return null;
+      const text = bodyCandidateText(element);
+      if (isMetadataOnlyText(text, metadataTexts) || seen.has(text)) return null;
+      seen.add(text);
+      const direct = directText(element);
+      const isDirAuto = element.getAttribute("dir") === "auto";
+      const isMarked = element.matches("[data-message-text], [data-message-content]");
+      const isKnown = element.matches("div.GDhqjd, div.vdlEi, div.iOHNLd, div.TVitee, div.jU4nEd");
+      const score = (isMarked ? 1000 : 0)
+        + (isKnown ? 500 : 0)
+        + (isDirAuto ? 100 : 0)
+        + (direct ? 25 : 0)
+        + Math.min(text.length, 500)
+        + index / 1000;
+      return { element, text, score };
+    }).filter(Boolean);
+
+    usable.sort((left, right) => right.score - left.score);
+    return usable[0] || null;
+  }
+
+  function collectTextLeaves(element, metadataTexts) {
+    const leaves = [];
+    const elements = [element, ...element.querySelectorAll("*")];
+    for (const candidate of elements) {
+      if (!isVisible(candidate) || candidate.matches(METADATA_SELECTOR)) continue;
+      if (candidate.children.length > 0) continue;
+      const text = bodyCandidateText(candidate);
+      if (!isMetadataOnlyText(text, metadataTexts)) leaves.push(candidate);
+    }
+    return leaves;
+  }
+
+  function extractMessageBody(node, sender, sentAt) {
+    const metadataTexts = collectMetadataTexts(node, sender, sentAt);
+    const markedCandidates = MESSAGE_BODY_SELECTORS.flatMap((selector) => selectorMatches(node, selector));
+    const marked = chooseBodyCandidate(markedCandidates, metadataTexts);
+    if (marked) return marked.text;
+
+    const genericCandidates = [
+      ...selectorMatches(node, "[dir='auto']"),
+      ...collectTextLeaves(node, metadataTexts)
+    ];
+    const generic = chooseBodyCandidate(genericCandidates, metadataTexts);
+    if (generic) return generic.text;
+
+    return collectTextLeaves(node, metadataTexts)
+      .map(bodyCandidateText)
+      .filter((text, index, all) => text && all.indexOf(text) === index)
+      .join("\n");
   }
 
   function isScrollable(element) {
@@ -95,7 +228,9 @@
   }
 
   function findMessageNodes(root) {
-    const strongCandidates = Array.from(root.querySelectorAll("[data-message-id], [data-message-text], [data-message-content]"));
+    const strongCandidates = Array.from(root.querySelectorAll(
+      "[data-message-id], [data-message-text], [data-message-content], div.nF6pT, div.GDhqjd, div.vdlEi"
+    ));
     const labelledCandidates = Array.from(root.querySelectorAll("[role='article'], [role='listitem']"))
       .filter((node) => /message|sent by|from /i.test(node.getAttribute("aria-label") || ""));
     const candidates = strongCandidates.length > 0 ? strongCandidates : labelledCandidates;
@@ -122,22 +257,21 @@
   }
 
   function extractMessage(node) {
-    const messageNode = node.matches("[data-message-text], [data-message-content]")
-      ? node
-      : node.querySelector("[data-message-text], [data-message-content], [dir='auto']");
     const timeNode = node.querySelector("time[datetime], time");
     const links = Array.from(node.querySelectorAll("a[href]"))
       .map((link) => ({ url: link.href, label: markdown.normalizeWhitespace(link.innerText || link.textContent) }))
       .filter((link) => link.url);
+    const sender = firstAttribute(
+      node,
+      ["[data-sender-name]", "[data-author-name]", "[aria-label*='sent by' i]", "[aria-label*='from ' i]"],
+      ["data-sender-name", "data-author-name", "aria-label"]
+    );
+    const sentAt = timeNode ? (timeNode.getAttribute("datetime") || visibleText(timeNode)) : "";
 
     return {
-      message: visibleText(messageNode || node),
-      sender: firstAttribute(
-        node,
-        ["[data-sender-name]", "[data-author-name]", "[aria-label*='sent by' i]", "[aria-label*='from ' i]"],
-        ["data-sender-name", "data-author-name", "aria-label"]
-      ),
-      sentAt: timeNode ? (timeNode.getAttribute("datetime") || visibleText(timeNode)) : "",
+      message: extractMessageBody(node, sender, sentAt),
+      sender,
+      sentAt,
       links
     };
   }
