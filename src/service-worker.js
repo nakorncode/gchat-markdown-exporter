@@ -19,9 +19,10 @@ chrome.runtime.onStartup.addListener(registerContextMenu);
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== MENU_ID || !tab || typeof tab.id !== "number") return;
+  const frameId = typeof info.frameId === "number" ? info.frameId : 0;
 
   try {
-    const result = await chrome.tabs.sendMessage(tab.id, { type: "GET_EXPORT_RECORD" });
+    const result = await chrome.tabs.sendMessage(tab.id, { type: "GET_EXPORT_RECORD" }, { frameId });
     if (!result || result.error) throw new Error(result && result.error ? result.error : "No exportable message found.");
 
     const downloadUrl = `data:text/markdown;charset=utf-8,${encodeURIComponent(result.markdown)}`;
@@ -31,14 +32,14 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       saveAs: false,
       conflictAction: "uniquify"
     });
-    await chrome.tabs.sendMessage(tab.id, { type: "EXPORT_RESULT", ok: true });
+    await chrome.tabs.sendMessage(tab.id, { type: "EXPORT_RESULT", ok: true }, { frameId });
   } catch (error) {
     try {
       await chrome.tabs.sendMessage(tab.id, {
         type: "EXPORT_RESULT",
         ok: false,
         error: error instanceof Error ? error.message : "Export failed."
-      });
+      }, { frameId });
     } catch (_ignored) {
       // The page may have navigated away or the content script may not be ready.
     }

@@ -12,6 +12,8 @@ A small Manifest V3 Chrome extension that exports the currently open Google Chat
 
 The extension does not scroll for you. It captures the active chat root and all message-like content currently loaded inside it, not the whole Gmail page. Selected text is only a fallback when no active chat window can be detected.
 
+The content script runs in matching child frames because Gmail-integrated Google Chat may place the conversation UI in a frame. The context-menu click's frame is used for the export request, so the top Gmail document cannot incorrectly report that no chat is open.
+
 ## Install locally
 
 1. Open `chrome://extensions`.

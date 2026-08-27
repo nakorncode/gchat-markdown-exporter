@@ -36,15 +36,17 @@ The context-menu API does not provide an arbitrary DOM element to the service wo
 
 Google Chat is a dynamic application and its internal DOM structure can change. The extractor must prefer semantic attributes (`data-message-id`, ARIA roles, and accessible labels) over CSS class names, and should fail clearly when it cannot identify a message.
 
+Gmail-integrated Chat may render its conversation UI in a child frame. The content script therefore runs in all matching frames, and the service worker sends the export request back to the exact `frameId` where the user opened the context menu. This prevents the top Gmail frame from answering with a false "no chat" result.
+
 The extension exports what is currently loaded in the detected chat root. It never scrolls automatically; the user controls scrolling to load older or newer content before exporting. It does not fetch older messages, decrypt content, bypass access controls, reconstruct deleted messages, or export attachments in v0.
 
 If Google Chat virtualizes the message list and removes previously viewed messages from the DOM, a later version will need an incremental scroll-cache. This version reports the current DOM snapshot clearly rather than pretending that an unavailable message is complete.
 
 ## Technical shape
 
-- `manifest.json`: Manifest V3 permissions, service worker, and Gmail/Chat content script matches
+- `manifest.json`: Manifest V3 permissions, service worker, Gmail/Chat matches, and `all_frames` injection
 - `src/content-script.js`: chat-root detection, session extraction, notification UI
-- `src/service-worker.js`: context menu registration and download creation
+- `src/service-worker.js`: context menu registration, frame-targeted messaging, and download creation
 - `src/markdown.js`: pure DOM-to-record and record-to-Markdown functions
 - `tests/markdown.test.js`: Node test coverage for formatting and sanitization
 
