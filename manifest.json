@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Google Chat Markdown Exporter",
-  "version": "0.1.0",
-  "description": "Export a visible Google Chat message to a local Markdown file.",
+  "version": "0.2.0",
+  "description": "Export a visible Google Chat session and its inline image attachments locally.",
   "permissions": [
     "contextMenus",
     "downloads"

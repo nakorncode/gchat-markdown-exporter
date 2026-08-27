@@ -54,7 +54,7 @@ test("formats a complete chat session with message boundaries", () => {
   assert.ok(result.indexOf("First message") < result.indexOf("Second message"));
 });
 
-test("formats quoted replies and durable inline images", () => {
+test("formats quoted replies and locally packaged inline images", () => {
   const result = markdown.recordToMarkdown({
     kind: "session",
     title: "Project channel",
@@ -63,10 +63,15 @@ test("formats quoted replies and durable inline images", () => {
       message: "See the update",
       links: [],
       quotes: ["Earlier message"],
-      images: [{ alt: "Uploaded image", url: "https://example.com/image.png" }]
+      images: [{
+        alt: "Uploaded image",
+        url: "https://chat.google.com/u/0/api/get_attachment_url?content_type=image%2Fpng&attachment_token=fixture",
+        path: "assets/image-001.png"
+      }]
     }]
   });
 
   assert.match(result, /> Earlier message/);
-  assert.match(result, /!\[Uploaded image\]\(https:\/\/example\.com\/image\.png\)/);
+  assert.match(result, /!\[Uploaded image\]\(assets\/image-001\.png\)/);
+  assert.doesNotMatch(result, /attachment_token/);
 });

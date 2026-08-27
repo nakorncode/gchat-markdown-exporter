@@ -25,6 +25,21 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     const result = await chrome.tabs.sendMessage(tab.id, { type: "GET_EXPORT_RECORD" }, { frameId });
     if (!result || result.error) throw new Error(result && result.error ? result.error : "No exportable message found.");
 
+    const assets = Array.isArray(result.assets) ? result.assets : [];
+    for (let index = 0; index < assets.length; index += 1) {
+      const asset = assets[index];
+      try {
+        await chrome.downloads.download({
+          url: asset.url,
+          filename: asset.filename,
+          saveAs: false,
+          conflictAction: "uniquify"
+        });
+      } catch (_error) {
+        throw new Error(`Could not download image ${index + 1}. The Markdown file was not created.`);
+      }
+    }
+
     const downloadUrl = `data:text/markdown;charset=utf-8,${encodeURIComponent(result.markdown)}`;
     await chrome.downloads.download({
       url: downloadUrl,

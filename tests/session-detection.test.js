@@ -147,7 +147,7 @@ test("uses the live Chat body wrapper instead of its data-message-id sender desc
             <div class="DTp27d QIJiHb Zc1Emd">
               Actual message body <img class="iiJ4W" data-emoji="true" aria-label="🙂">
               <a href="https://example.com/docs">Docs</a>
-              <img src="https://example.com/image.png" alt="Uploaded image">
+              <img src="https://chat.google.com/u/0/api/get_attachment_url?content_type=image%2Fpng&amp;attachment_token=fixture" alt="Uploaded image">
             </div>
             <div data-is-same-group-quote="true">Quoted reply content</div>
           </div>
@@ -175,7 +175,9 @@ test("uses the live Chat body wrapper instead of its data-message-id sender desc
   assert.match(response.markdown, /### Alice — 10:00/);
   assert.match(response.markdown, /Actual message body 🙂\s+Docs/);
   assert.match(response.markdown, /> Quoted reply content/);
-  assert.match(response.markdown, /!\[Uploaded image\]\(https:\/\/example\.com\/image\.png\)/);
+  assert.match(response.markdown, /!\[Uploaded image\]\(assets\/image-001\.png\)/);
+  assert.equal(response.assets.length, 1);
+  assert.match(response.assets[0].filename, /\/assets\/image-001\.png$/);
   assert.doesNotMatch(response.markdown, /\nAlice\n/);
 });
 

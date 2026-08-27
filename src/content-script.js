@@ -312,7 +312,31 @@
         alt: markdown.normalizeWhitespace(image.getAttribute("alt") || image.getAttribute("aria-label") || "Image"),
         url: image.currentSrc || image.src || ""
       }))
-      .filter((image) => /^https?:\/\//i.test(image.url));
+      .filter((image) => isChatImageAttachment(image.url));
+  }
+
+  function isChatImageAttachment(url) {
+    try {
+      const parsed = new URL(url);
+      return parsed.origin === "https://chat.google.com"
+        && /\/api\/get_attachment_url$/.test(parsed.pathname)
+        && /^image\//i.test(parsed.searchParams.get("content_type") || "");
+    } catch (_ignored) {
+      return false;
+    }
+  }
+
+  function imageExtension(url) {
+    try {
+      const contentType = new URL(url).searchParams.get("content_type") || "";
+      const subtype = contentType.toLowerCase().split("/")[1] || "";
+      const safeSubtype = subtype.replace(/[^a-z0-9]/g, "");
+      if (safeSubtype === "jpeg") return "jpg";
+      if (/^(png|jpg|gif|webp|svg|avif|bmp|ico|tiff)$/.test(safeSubtype)) return safeSubtype;
+    } catch (_ignored) {
+      // A fallback extension is used below.
+    }
+    return "img";
   }
 
   function extractQuotes(element) {
@@ -419,6 +443,39 @@
     return `${markdown.sanitizeFilename(`${title}-${stamp}`)}.md`;
   }
 
+  function packageRecord(record) {
+    const filename = filenameFor(record);
+    if (!record || !Array.isArray(record.messages)) {
+      return { filename, markdown: markdown.recordToMarkdown(record), assets: [] };
+    }
+
+    const bundleName = filename.replace(/\.md$/i, "");
+    const assetByUrl = new Map();
+    const assets = [];
+    const messages = record.messages.map((message) => ({
+      ...message,
+      images: (Array.isArray(message.images) ? message.images : []).map((image) => {
+        if (!image || !image.url) return image;
+        let asset = assetByUrl.get(image.url);
+        if (!asset) {
+          const ordinal = String(assets.length + 1).padStart(3, "0");
+          const path = `assets/image-${ordinal}.${imageExtension(image.url)}`;
+          asset = { url: image.url, path, filename: `${bundleName}/${path}` };
+          assetByUrl.set(image.url, asset);
+          assets.push(asset);
+        }
+        return { ...image, path: asset.path };
+      })
+    }));
+    const packagedRecord = { ...record, messages };
+
+    return {
+      filename: assets.length > 0 ? `${bundleName}/${filename}` : filename,
+      markdown: markdown.recordToMarkdown(packagedRecord),
+      assets
+    };
+  }
+
   function showToast(message, isError) {
     const existing = document.getElementById("gchat-markdown-exporter-toast");
     if (existing) existing.remove();
@@ -443,10 +500,7 @@
     if (request && request.type === "GET_EXPORT_RECORD") {
       const root = lastContextRoot && document.contains(lastContextRoot) ? lastContextRoot : findActiveChatWindow();
       const record = extractSessionRecord(root, lastSelection);
-      sendResponse(record ? {
-        filename: filenameFor(record),
-        markdown: markdown.recordToMarkdown(record)
-      } : { error: "No active Google Chat session was detected. Open a chat and right-click inside its window." });
+      sendResponse(record ? packageRecord(record) : { error: "No active Google Chat session was detected. Open a chat and right-click inside its window." });
       return false;
     }
     if (request && request.type === "EXPORT_RESULT") {

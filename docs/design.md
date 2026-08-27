@@ -20,7 +20,7 @@ The context-menu API does not provide an arbitrary DOM element to the service wo
 - Export source: visible DOM content from the current Google Chat page
 - Primary interaction: right-click anywhere inside the currently open chat window, then choose `Export current Google Chat session to Markdown`
 - Fallback: selected text can be exported only when no active chat window is detected
-- Output: one Markdown file downloaded to the user's normal Chrome download location
+- Output: one Markdown file downloaded to the user's normal Chrome download location; sessions with inline image attachments are packaged as a folder with an `assets/` subfolder
 
 ## v0 scope
 
@@ -31,6 +31,7 @@ The context-menu API does not provide an arbitrary DOM element to the service wo
 5. Use a filename based on the detected chat title and timestamp.
 6. Show a small success or failure notification in the page.
 7. Keep extraction and formatting logic unit-testable without Google Chat access.
+8. Download visible Google Chat image attachments to local `assets/` files and use relative paths in Markdown; do not write attachment tokens to the Markdown output.
 
 ## Known limitations
 
@@ -64,7 +65,7 @@ Body extraction is evidence-ranked:
 
 The extractor never treats the first `[dir="auto"]` element as the body by default. This is important because that node can be sender metadata. For the verified Gmail Chat frame, it selects `nF6pT` containers before generic `[data-message-id]` elements, extracts sender from `njhDLd O5OMdc`, and uses the non-`aria-hidden` `FvYVyf[data-absolute-timestamp]` timestamp. The frame-targeted request and active chat-root boundary remain unchanged, and the extractor does not scroll or query the Google Chat API.
 
-The Markdown record also keeps body-scoped links, visible quoted replies, inline emoji, and HTTP(S) body images. It intentionally excludes reaction/profile controls plus `blob:` and `data:` image URLs. Google-hosted image URLs can require the current login and can expire. JSON would be a suitable future optional sidecar for lossless structured export, but v0 keeps one readable local Markdown file.
+The Markdown record also keeps body-scoped links, visible quoted replies, and inline emoji. It treats images more conservatively: only the Google Chat attachment endpoint with an explicit `image/*` content type is accepted. The service worker queues each accepted attachment into an `assets/` directory before downloading the Markdown file, and the Markdown uses relative paths rather than retaining temporary attachment URLs. Profile/reaction controls, link previews, `blob:` URLs, and `data:` images are intentionally excluded. The browser uses the existing signed-in Chat session for downloads, without inspecting cookies or storage. JSON would be a suitable future optional sidecar for lossless structured export.
 
 Session titles are resolved independently of message extraction. In the verified Gmail Chat frame, the preferred title is the `aria-label` on the active conversation header with Google Chat conversation event markers, followed by the labelled main conversation region. Generic headings inside `nF6pT` containers or `[data-message-id]` sender elements are excluded so a participant name cannot replace the Space or DM title.
 
@@ -73,7 +74,7 @@ The semantic and class-based paths are covered by redacted DOM fixtures. A live 
 ## Acceptance criteria
 
 - Right-clicking anywhere inside an active Gmail Chat session shows `Export current Google Chat session to Markdown`.
-- Selecting the item downloads a readable `.md` file without network requests.
+- Selecting the item downloads a readable `.md` file and, when applicable, local image assets through the browser's normal download flow.
 - The export contains all message-like content currently loaded in the selected chat root and preserves basic links.
 - Exporting selected text works only as a fallback when no chat session is detected.
 - The extension remains usable after Gmail's SPA navigation and dynamic DOM updates.
