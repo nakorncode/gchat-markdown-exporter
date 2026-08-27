@@ -132,3 +132,49 @@ test("uses class-based message containers without falling back to the whole page
   assert.doesNotMatch(response.markdown, /Other Gmail navigation/);
   assert.doesNotMatch(response.markdown, /Composer draft must not be exported/);
 });
+
+test("uses the live Chat body wrapper instead of its data-message-id sender descendant", () => {
+  const dom = new JSDOM(`
+    <!doctype html>
+    <html><head><title>Fixture Chat - Gmail</title></head><body>
+      <div id="c61"><div class="CjZXwd"><c-wiz>
+        <div class="Bl2pUd">
+          <div class="nF6pT">
+            <div class="F0wyae oGsu4">
+              <span data-message-id="sender-marker"><span class="njhDLd O5OMdc">Alice</span></span>
+              <span class="FvYVyf" data-absolute-timestamp="true">10:00</span>
+            </div>
+            <div class="DTp27d QIJiHb Zc1Emd">
+              Actual message body <img class="iiJ4W" data-emoji="true" aria-label="🙂">
+              <a href="https://example.com/docs">Docs</a>
+              <img src="https://example.com/image.png" alt="Uploaded image">
+            </div>
+            <div data-is-same-group-quote="true">Quoted reply content</div>
+          </div>
+        </div>
+      </c-wiz></div></div>
+    </body></html>
+  `, {
+    url: "https://chat.google.com/u/0/frame",
+    pretendToBeVisual: true,
+    runScripts: "outside-only"
+  });
+  const listeners = [];
+  dom.window.chrome = { runtime: { onMessage: { addListener: (listener) => listeners.push(listener) } } };
+  vm.runInContext(markdownSource, dom.getInternalVMContext(), { filename: "markdown.js" });
+  vm.runInContext(contentSource, dom.getInternalVMContext(), { filename: "content-script.js" });
+
+  dom.window.document.querySelector(".DTp27d").dispatchEvent(
+    new dom.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true, view: dom.window })
+  );
+  let response;
+  listeners[0]({ type: "GET_EXPORT_RECORD" }, {}, (value) => { response = value; });
+  dom.window.close();
+
+  assert.equal(response.error, undefined);
+  assert.match(response.markdown, /### Alice — 10:00/);
+  assert.match(response.markdown, /Actual message body 🙂\s+Docs/);
+  assert.match(response.markdown, /> Quoted reply content/);
+  assert.match(response.markdown, /!\[Uploaded image\]\(https:\/\/example\.com\/image\.png\)/);
+  assert.doesNotMatch(response.markdown, /\nAlice\n/);
+});

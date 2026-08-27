@@ -53,3 +53,20 @@ test("formats a complete chat session with message boundaries", () => {
   assert.match(result, /### Bob — 10:01/);
   assert.ok(result.indexOf("First message") < result.indexOf("Second message"));
 });
+
+test("formats quoted replies and durable inline images", () => {
+  const result = markdown.recordToMarkdown({
+    kind: "session",
+    title: "Project channel",
+    messages: [{
+      sender: "Alice",
+      message: "See the update",
+      links: [],
+      quotes: ["Earlier message"],
+      images: [{ alt: "Uploaded image", url: "https://example.com/image.png" }]
+    }]
+  });
+
+  assert.match(result, /> Earlier message/);
+  assert.match(result, /!\[Uploaded image\]\(https:\/\/example\.com\/image\.png\)/);
+});

@@ -6,6 +6,7 @@
   const MESSAGE_BODY_SELECTORS = [
     "[data-message-text]",
     "[data-message-content]",
+    "div.DTp27d.QIJiHb.Zc1Emd",
     "div.GDhqjd",
     "div.vdlEi",
     "div.iOHNLd",
@@ -26,6 +27,7 @@
     "time",
     "[data-sender-name]",
     "[data-author-name]",
+    "span[data-message-id]",
     "[data-absolute-timestamp]",
     "[aria-label*='sent by' i]",
     "[aria-label*='from ' i]",
@@ -57,6 +59,17 @@
     return markdown.normalizeWhitespace(clone.innerText || clone.textContent || "");
   }
 
+  function visibleMessageText(element) {
+    if (!element) return "";
+    const clone = element.cloneNode(true);
+    clone.querySelectorAll(METADATA_SELECTOR).forEach((node) => node.remove());
+    clone.querySelectorAll("img[data-emoji]").forEach((image) => {
+      const emoji = image.getAttribute("aria-label") || image.getAttribute("alt") || "";
+      image.replaceWith(document.createTextNode(emoji));
+    });
+    return markdown.normalizeWhitespace(clone.innerText || clone.textContent || "");
+  }
+
   function directText(element) {
     if (!element) return "";
     return markdown.normalizeWhitespace(Array.from(element.childNodes)
@@ -77,6 +90,8 @@
     const selectors = [
       "[data-sender-name]",
       "[data-author-name]",
+      "[data-message-id] .njhDLd.O5OMdc",
+      "span.njhDLd.O5OMdc",
       "time",
       "[data-absolute-timestamp]",
       "[aria-label*='sent by' i]",
@@ -102,7 +117,7 @@
   }
 
   function bodyCandidateText(element) {
-    return visibleText(element);
+    return visibleMessageText(element);
   }
 
   function chooseBodyCandidate(candidates, metadataTexts) {
@@ -116,7 +131,9 @@
       const isDirAuto = element.getAttribute("dir") === "auto";
       const isMarked = element.matches("[data-message-text], [data-message-content]");
       const isKnown = element.matches("div.GDhqjd, div.vdlEi, div.iOHNLd, div.TVitee, div.jU4nEd");
+      const isLiveChatBody = element.matches("div.DTp27d.QIJiHb.Zc1Emd");
       const score = (isMarked ? 1000 : 0)
+        + (isLiveChatBody ? 750 : 0)
         + (isKnown ? 500 : 0)
         + (isDirAuto ? 100 : 0)
         + (direct ? 25 : 0)
@@ -141,23 +158,24 @@
     return leaves;
   }
 
-  function extractMessageBody(node, sender, sentAt) {
+  function findMessageBody(node, sender, sentAt) {
     const metadataTexts = collectMetadataTexts(node, sender, sentAt);
     const markedCandidates = MESSAGE_BODY_SELECTORS.flatMap((selector) => selectorMatches(node, selector));
     const marked = chooseBodyCandidate(markedCandidates, metadataTexts);
-    if (marked) return marked.text;
+    if (marked) return marked;
 
     const genericCandidates = [
       ...selectorMatches(node, "[dir='auto']"),
       ...collectTextLeaves(node, metadataTexts)
     ];
     const generic = chooseBodyCandidate(genericCandidates, metadataTexts);
-    if (generic) return generic.text;
+    if (generic) return generic;
 
-    return collectTextLeaves(node, metadataTexts)
+    const text = collectTextLeaves(node, metadataTexts)
       .map(bodyCandidateText)
       .filter((text, index, all) => text && all.indexOf(text) === index)
       .join("\n");
+    return text ? { element: node, text } : null;
   }
 
   function isScrollable(element) {
@@ -228,8 +246,9 @@
   }
 
   function findMessageNodes(root) {
-    const strongCandidates = Array.from(root.querySelectorAll(
-      "[data-message-id], [data-message-text], [data-message-content], div.nF6pT, div.GDhqjd, div.vdlEi"
+    const liveChatContainers = Array.from(root.querySelectorAll("div.nF6pT"));
+    const strongCandidates = liveChatContainers.length > 0 ? liveChatContainers : Array.from(root.querySelectorAll(
+      "[data-message-id], [data-message-text], [data-message-content], div.GDhqjd, div.vdlEi"
     ));
     const labelledCandidates = Array.from(root.querySelectorAll("[role='article'], [role='listitem']"))
       .filter((node) => /message|sent by|from /i.test(node.getAttribute("aria-label") || ""));
@@ -256,23 +275,76 @@
     return "";
   }
 
-  function extractMessage(node) {
-    const timeNode = node.querySelector("time[datetime], time");
-    const links = Array.from(node.querySelectorAll("a[href]"))
+  function firstVisibleText(element, selectors) {
+    for (const selector of selectors) {
+      for (const node of selectorMatches(element, selector)) {
+        if (node.closest("[aria-hidden='true']")) continue;
+        const value = visibleText(node);
+        if (value) return value;
+      }
+    }
+    return "";
+  }
+
+  function firstTimestamp(element, selectors) {
+    for (const selector of selectors) {
+      for (const node of selectorMatches(element, selector)) {
+        if (node.closest("[aria-hidden='true']")) continue;
+        const value = node.getAttribute("datetime") || visibleText(node);
+        if (value) return value;
+      }
+    }
+    return "";
+  }
+
+  function extractLinks(element) {
+    if (!element) return [];
+    return Array.from(element.querySelectorAll("a[href]"))
       .map((link) => ({ url: link.href, label: markdown.normalizeWhitespace(link.innerText || link.textContent) }))
       .filter((link) => link.url);
-    const sender = firstAttribute(
+  }
+
+  function extractImages(element) {
+    if (!element) return [];
+    return Array.from(element.querySelectorAll("img:not([data-emoji])"))
+      .filter((image) => !image.closest("[aria-hidden='true']"))
+      .map((image) => ({
+        alt: markdown.normalizeWhitespace(image.getAttribute("alt") || image.getAttribute("aria-label") || "Image"),
+        url: image.currentSrc || image.src || ""
+      }))
+      .filter((image) => /^https?:\/\//i.test(image.url));
+  }
+
+  function extractQuotes(element) {
+    const candidates = selectorMatches(element, "[data-is-same-group-quote], [data-can-navigate-to-original-message]");
+    const selected = [];
+    for (const candidate of candidates) {
+      if (selected.some((parent) => parent.contains(candidate))) continue;
+      const text = visibleText(candidate);
+      if (text) selected.push(candidate);
+    }
+    return selected
+      .map(visibleText)
+      .filter((text, index, all) => text && all.indexOf(text) === index);
+  }
+
+  function extractMessage(node) {
+    const sender = firstVisibleText(node, ["[data-message-id] .njhDLd.O5OMdc", "span.njhDLd.O5OMdc"])
+      || firstAttribute(
       node,
       ["[data-sender-name]", "[data-author-name]", "[aria-label*='sent by' i]", "[aria-label*='from ' i]"],
       ["data-sender-name", "data-author-name", "aria-label"]
     );
-    const sentAt = timeNode ? (timeNode.getAttribute("datetime") || visibleText(timeNode)) : "";
+    const sentAt = firstTimestamp(node, ["time[datetime]", "time", "span.FvYVyf[data-absolute-timestamp]"]);
+    const body = findMessageBody(node, sender, sentAt);
 
     return {
-      message: extractMessageBody(node, sender, sentAt),
+      message: body ? body.text : "",
       sender,
       sentAt,
-      links
+      links: extractLinks(body && body.element),
+      images: extractImages(body && body.element),
+      quotes: extractQuotes(node)
     };
   }
 
@@ -309,7 +381,8 @@
       } : null;
     }
 
-    const messages = findMessageNodes(sessionRoot).map(extractMessage).filter((record) => record.message);
+    const messages = findMessageNodes(sessionRoot).map(extractMessage)
+      .filter((record) => record.message || record.images.length > 0 || record.quotes.length > 0);
     const transcriptText = messages.length > 0 ? "" : visibleText(sessionRoot);
     if (messages.length === 0 && !transcriptText) return null;
 

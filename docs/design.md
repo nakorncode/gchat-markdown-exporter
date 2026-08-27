@@ -59,10 +59,12 @@ Each message candidate is extracted independently inside the chat root associate
 Body extraction is evidence-ranked:
 
 1. Semantic markers (`data-message-text` and `data-message-content`) are preferred.
-2. Known Google Chat message-body classes (`GDhqjd`, `vdlEi`, `iOHNLd`, `TVitee`, and `jU4nEd`) are compatibility hints based on the public reference implementation.
+2. Known Google Chat message-body classes (`DTp27d QIJiHb Zc1Emd`, `GDhqjd`, `vdlEi`, `iOHNLd`, `TVitee`, and `jU4nEd`) are compatibility hints. The Gmail-integrated Chat DOM verified on 2026-08-27 uses one `DTp27d QIJiHb Zc1Emd` body inside each `nF6pT` message container. Its `[data-message-id]` span is the sender label, not the message root.
 3. If no marked body is available, visible `[dir="auto"]` candidates and text leaves are ranked after removing timestamps, sender labels, buttons, reactions, accessibility-only labels, and duplicate ancestor text.
 
-The extractor never treats the first `[dir="auto"]` element as the body by default. This is important because that node can be sender metadata. The frame-targeted request and active chat-root boundary remain unchanged, and the extractor does not scroll or query the Google Chat API.
+The extractor never treats the first `[dir="auto"]` element as the body by default. This is important because that node can be sender metadata. For the verified Gmail Chat frame, it selects `nF6pT` containers before generic `[data-message-id]` elements, extracts sender from `njhDLd O5OMdc`, and uses the non-`aria-hidden` `FvYVyf[data-absolute-timestamp]` timestamp. The frame-targeted request and active chat-root boundary remain unchanged, and the extractor does not scroll or query the Google Chat API.
+
+The Markdown record also keeps body-scoped links, visible quoted replies, inline emoji, and HTTP(S) body images. It intentionally excludes reaction/profile controls plus `blob:` and `data:` image URLs. Google-hosted image URLs can require the current login and can expire. JSON would be a suitable future optional sidecar for lossless structured export, but v0 keeps one readable local Markdown file.
 
 The semantic and class-based paths are covered by redacted DOM fixtures. A live authenticated Chrome DOM was not available for attachment during the latest verification, so selector compatibility should be rechecked manually after loading the extension in the user's current Chrome session. Report only frame metadata, selector counts, dimensions, and redacted tag/class/attribute shapes; do not copy chat text, cookies, or storage.
 

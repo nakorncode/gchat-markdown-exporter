@@ -39,6 +39,31 @@
     }
   }
 
+  function appendQuotes(lines, quotes) {
+    const uniqueQuotes = Array.from(new Set((Array.isArray(quotes) ? quotes : [])
+      .map((quote) => normalizeWhitespace(quote))
+      .filter(Boolean)));
+    if (uniqueQuotes.length === 0) return;
+    lines.push("", "#### Quoted replies", "");
+    for (const quote of uniqueQuotes) {
+      quote.split("\n").forEach((line) => lines.push(`> ${line}`));
+      lines.push(">");
+    }
+    lines.pop();
+  }
+
+  function appendImages(lines, images) {
+    const uniqueImages = (Array.isArray(images) ? images : []).filter((image, index, all) => {
+      return image && /^https?:\/\//i.test(image.url || "")
+        && all.findIndex((candidate) => candidate && candidate.url === image.url) === index;
+    });
+    if (uniqueImages.length === 0) return;
+    lines.push("", "#### Images", "");
+    for (const image of uniqueImages) {
+      lines.push(`![${escapeInline(image.alt || "Image")}](${image.url})`);
+    }
+  }
+
   function sessionToMarkdown(session) {
     const title = escapeInline(session && session.title ? session.title : "Google Chat session");
     const lines = [`# ${title}`, ""];
@@ -51,8 +76,15 @@
     if (messages.length > 0) {
       messages.forEach((message, index) => {
         const label = [message.sender, message.sentAt].filter(Boolean).join(" — ") || `Message ${index + 1}`;
-        lines.push(`### ${escapeInline(label)}`, "", normalizeWhitespace(message.message) || "(No visible message text was found.)");
+        const body = normalizeWhitespace(message.message);
+        const hasRichContent = (Array.isArray(message.quotes) && message.quotes.length > 0)
+          || (Array.isArray(message.images) && message.images.length > 0);
+        lines.push(`### ${escapeInline(label)}`, "");
+        if (body) lines.push(body);
+        else if (!hasRichContent) lines.push("(No visible message text was found.)");
+        appendQuotes(lines, message.quotes);
         appendLinks(lines, message.links);
+        appendImages(lines, message.images);
         lines.push("");
       });
     } else {
