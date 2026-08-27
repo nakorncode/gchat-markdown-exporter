@@ -66,6 +66,8 @@ The extractor never treats the first `[dir="auto"]` element as the body by defau
 
 The Markdown record also keeps body-scoped links, visible quoted replies, inline emoji, and HTTP(S) body images. It intentionally excludes reaction/profile controls plus `blob:` and `data:` image URLs. Google-hosted image URLs can require the current login and can expire. JSON would be a suitable future optional sidecar for lossless structured export, but v0 keeps one readable local Markdown file.
 
+Session titles are resolved independently of message extraction. In the verified Gmail Chat frame, the preferred title is the `aria-label` on the active conversation header with Google Chat conversation event markers, followed by the labelled main conversation region. Generic headings inside `nF6pT` containers or `[data-message-id]` sender elements are excluded so a participant name cannot replace the Space or DM title.
+
 The semantic and class-based paths are covered by redacted DOM fixtures. A live authenticated Chrome DOM was not available for attachment during the latest verification, so selector compatibility should be rechecked manually after loading the extension in the user's current Chrome session. Report only frame metadata, selector counts, dimensions, and redacted tag/class/attribute shapes; do not copy chat text, cookies, or storage.
 
 ## Acceptance criteria

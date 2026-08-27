@@ -178,3 +178,44 @@ test("uses the live Chat body wrapper instead of its data-message-id sender desc
   assert.match(response.markdown, /!\[Uploaded image\]\(https:\/\/example\.com\/image\.png\)/);
   assert.doesNotMatch(response.markdown, /\nAlice\n/);
 });
+
+test("uses the active conversation header instead of a sender heading as the session title", () => {
+  const dom = new JSDOM(`
+    <!doctype html>
+    <html><head><title>Gmail</title></head><body>
+      <div id="c61"><div class="CjZXwd">
+        <header class="QHAzdb" aria-label="T8 Developments"
+          data-open-conversation-event-type-xid="true"
+          data-open-conversation-in-full-screen-event-type-xid="true">
+          <button aria-label="T8 Developments">T8 Developments</button>
+        </header>
+        <c-wiz><div class="Bl2pUd"><div class="nF6pT">
+          <div class="F0wyae oGsu4">
+            <span data-message-id="sender-marker" role="heading"><span class="njhDLd O5OMdc">Kwang Kanit</span></span>
+            <span class="FvYVyf" data-absolute-timestamp="true">10:00</span>
+          </div>
+          <div class="DTp27d QIJiHb Zc1Emd">Message body from the active Space</div>
+        </div></div></c-wiz>
+      </div></div>
+    </body></html>
+  `, {
+    url: "https://chat.google.com/u/0/frame",
+    pretendToBeVisual: true,
+    runScripts: "outside-only"
+  });
+  const listeners = [];
+  dom.window.chrome = { runtime: { onMessage: { addListener: (listener) => listeners.push(listener) } } };
+  vm.runInContext(markdownSource, dom.getInternalVMContext(), { filename: "markdown.js" });
+  vm.runInContext(contentSource, dom.getInternalVMContext(), { filename: "content-script.js" });
+
+  dom.window.document.querySelector(".DTp27d").dispatchEvent(
+    new dom.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true, view: dom.window })
+  );
+  let response;
+  listeners[0]({ type: "GET_EXPORT_RECORD" }, {}, (value) => { response = value; });
+  dom.window.close();
+
+  assert.equal(response.error, undefined);
+  assert.match(response.markdown, /^# T8 Developments$/m);
+  assert.doesNotMatch(response.markdown, /^# Kwang Kanit$/m);
+});

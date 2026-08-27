@@ -38,6 +38,8 @@ The exporter captures only messages currently present in the active chat root. I
 
 Markdown is the default because it is easy to read and search. A future optional JSON sidecar would be appropriate for machine processing, lossless message metadata, media provenance, or re-rendering; it is intentionally not written in v0 so each export remains a single local file.
 
+For Gmail-integrated Chat, the export title prefers the active conversation header (`header[aria-label]` with Google Chat conversation event markers), then the active conversation main region. Sender headings inside message containers are never used as the session title.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

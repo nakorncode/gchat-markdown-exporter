@@ -349,6 +349,21 @@
   }
 
   function detectSessionTitle(root) {
+    const primarySelectors = [
+      "header[aria-label][data-open-conversation-in-full-screen-event-type-xid]",
+      "header[aria-label][data-open-conversation-event-type-xid]",
+      "[role='main'][aria-label]"
+    ];
+    for (const selector of primarySelectors) {
+      for (const node of selectorMatches(root, selector)) {
+        if (!isVisible(node)) continue;
+        const value = node.getAttribute("aria-label");
+        if (value && value.trim().length >= 2 && value.trim().length <= 160) {
+          return markdown.normalizeWhitespace(value);
+        }
+      }
+    }
+
     const titleNodes = [];
     const selectors = [
       "[data-conversation-title]",
@@ -362,6 +377,7 @@
     }
     for (const node of titleNodes) {
       if (!isVisible(node)) continue;
+      if (node.matches("svg, button, [role='button']") || node.closest("div.nF6pT, [data-message-id]")) continue;
       const value = node.getAttribute("data-conversation-title") || node.getAttribute("aria-label") || visibleText(node);
       if (value && value.trim().length >= 2 && value.trim().length <= 160) return markdown.normalizeWhitespace(value);
     }
