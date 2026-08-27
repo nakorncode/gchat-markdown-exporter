@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Google Chat Markdown Exporter",
+  "version": "0.1.0",
+  "description": "Export a visible Google Chat message to a local Markdown file.",
+  "permissions": [
+    "contextMenus",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://mail.google.com/*",
+    "https://chat.google.com/*"
+  ],
+  "background": {
+    "service_worker": "src/service-worker.js"
+  },
+  "action": {
+    "default_title": "Google Chat Markdown Exporter"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://mail.google.com/*",
+        "https://chat.google.com/*"
+      ],
+      "js": [
+        "src/markdown.js",
+        "src/content-script.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
