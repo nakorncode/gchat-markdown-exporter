@@ -2,48 +2,107 @@
   "use strict";
 
   const markdown = globalThis.GchatMarkdown;
-  let lastContextRecord = null;
+  const MESSAGE_SELECTOR = "[data-message-id], [data-message-text], [data-message-content], [role='article'], [role='listitem']";
+  const CHAT_ROOT_HINT_SELECTOR = "#c61 .CjZXwd, #c61, [data-conversation-view], [aria-label*='conversation' i], [aria-label*='chat' i], [role='main'], main";
+  let lastContextRoot = null;
   let lastSelection = "";
 
-  function isElement(value) {
-    return value && value.nodeType === Node.ELEMENT_NODE;
+  function asElement(value) {
+    if (!value) return null;
+    if (value.nodeType === 1) return value;
+    return value.parentElement || null;
+  }
+
+  function isVisible(element) {
+    if (!element || !element.isConnected) return false;
+    const style = window.getComputedStyle(element);
+    return style.display !== "none" && style.visibility !== "hidden";
   }
 
   function visibleText(element) {
+    if (!element) return "";
     const clone = element.cloneNode(true);
-    clone.querySelectorAll("script, style, noscript, template, button, [aria-hidden='true'], [role='button']")
+    clone.querySelectorAll("script, style, noscript, template, button, input, textarea, [contenteditable], [aria-hidden='true'], [role='button']")
       .forEach((node) => node.remove());
     return markdown.normalizeWhitespace(clone.innerText || clone.textContent || "");
   }
 
-  function candidateScore(element) {
-    const role = element.getAttribute("role");
+  function isScrollable(element) {
+    if (!isVisible(element)) return false;
+    const style = window.getComputedStyle(element);
+    const overflow = `${style.overflow} ${style.overflowY}`;
+    return /(auto|scroll)/.test(overflow) && element.scrollHeight > element.clientHeight + 40 && element.clientHeight > 120;
+  }
+
+  function sessionScore(element) {
     const text = visibleText(element);
+    if (text.length < 20) return -100;
+    const role = element.getAttribute("role") || "";
+    const label = element.getAttribute("aria-label") || "";
+    const messageCount = Math.min(element.querySelectorAll(MESSAGE_SELECTOR).length, 20);
     let score = 0;
-    if (element.hasAttribute("data-message-id")) score += 100;
-    if (element.hasAttribute("data-message-id")) score += 40;
-    if (role === "listitem" || role === "article") score += 50;
-    if (role === "gridcell") score += 15;
-    if (/message|sent by|from /i.test(element.getAttribute("aria-label") || "")) score += 25;
-    if (text.length > 0 && text.length <= 8000) score += 10;
-    if (text.length > 8000) score -= 100;
+    if (element.id === "c61") score += 30;
+    if (element.classList.contains("CjZXwd")) score += 25;
+    if (role === "main") score += 15;
+    if (/chat|conversation|message/i.test(label)) score += 20;
+    if (isScrollable(element)) score += 55;
+    score += messageCount * 6;
+    if (text.length <= 20000) score += 5;
+    if (element === document.body || element === document.documentElement) score -= 50;
     return score;
   }
 
-  function findMessageContainer(target) {
-    if (!isElement(target)) return null;
-    let current = target;
+  function findSessionRoot(target) {
+    const element = asElement(target);
+    if (!element) return null;
+
+    const candidates = [];
+    let current = element;
+    for (let depth = 0; current && depth < 12; depth += 1, current = current.parentElement) {
+      candidates.push(current);
+    }
+    document.querySelectorAll(CHAT_ROOT_HINT_SELECTOR).forEach((candidate) => {
+      if (candidate.contains(element) || candidate === element) candidates.push(candidate);
+    });
+
     let best = null;
-    let bestScore = 0;
-    for (let depth = 0; current && depth < 10; depth += 1, current = current.parentElement) {
-      const score = candidateScore(current);
+    let bestScore = -Infinity;
+    for (const candidate of candidates) {
+      const score = sessionScore(candidate);
       if (score > bestScore) {
-        best = current;
+        best = candidate;
         bestScore = score;
       }
-      if (current.hasAttribute("data-message-id")) break;
     }
-    return bestScore >= 50 ? best : null;
+    return bestScore >= 55 ? best : null;
+  }
+
+  function findActiveChatWindow() {
+    let best = null;
+    let bestScore = -Infinity;
+    document.querySelectorAll(CHAT_ROOT_HINT_SELECTOR).forEach((candidate) => {
+      const score = sessionScore(candidate);
+      if (score > bestScore) {
+        best = candidate;
+        bestScore = score;
+      }
+    });
+    return bestScore >= 55 ? best : null;
+  }
+
+  function findMessageNodes(root) {
+    const strongCandidates = Array.from(root.querySelectorAll("[data-message-id], [data-message-text], [data-message-content]"));
+    const labelledCandidates = Array.from(root.querySelectorAll("[role='article'], [role='listitem']"))
+      .filter((node) => /message|sent by|from /i.test(node.getAttribute("aria-label") || ""));
+    const candidates = strongCandidates.length > 0 ? strongCandidates : labelledCandidates;
+    const selected = [];
+
+    for (const candidate of candidates) {
+      if (!isVisible(candidate) || !visibleText(candidate)) continue;
+      if (selected.some((parent) => parent.contains(candidate))) continue;
+      selected.push(candidate);
+    }
+    return selected;
   }
 
   function firstAttribute(element, selectors, attributes) {
@@ -58,47 +117,79 @@
     return "";
   }
 
-  function extractRecord(container, selectionText) {
-    const now = new Date().toISOString();
-    if (!container) {
+  function extractMessage(node) {
+    const messageNode = node.matches("[data-message-text], [data-message-content]")
+      ? node
+      : node.querySelector("[data-message-text], [data-message-content], [dir='auto']");
+    const timeNode = node.querySelector("time[datetime], time");
+    const links = Array.from(node.querySelectorAll("a[href]"))
+      .map((link) => ({ url: link.href, label: markdown.normalizeWhitespace(link.innerText || link.textContent) }))
+      .filter((link) => link.url);
+
+    return {
+      message: visibleText(messageNode || node),
+      sender: firstAttribute(
+        node,
+        ["[data-sender-name]", "[data-author-name]", "[aria-label*='sent by' i]", "[aria-label*='from ' i]"],
+        ["data-sender-name", "data-author-name", "aria-label"]
+      ),
+      sentAt: timeNode ? (timeNode.getAttribute("datetime") || visibleText(timeNode)) : "",
+      links
+    };
+  }
+
+  function detectSessionTitle(root) {
+    const titleNodes = [];
+    const selectors = [
+      "[data-conversation-title]",
+      "[aria-label*='conversation' i]",
+      "[aria-label*='chat with' i]",
+      "h1",
+      "[role='heading']"
+    ];
+    for (const selector of selectors) {
+      root.querySelectorAll(selector).forEach((node) => titleNodes.push(node));
+    }
+    for (const node of titleNodes) {
+      if (!isVisible(node)) continue;
+      const value = node.getAttribute("data-conversation-title") || node.getAttribute("aria-label") || visibleText(node);
+      if (value && value.trim().length >= 2 && value.trim().length <= 160) return markdown.normalizeWhitespace(value);
+    }
+    return document.title.replace(/\s*-\s*Gmail\s*$/i, "").trim() || "Google Chat session";
+  }
+
+  function extractSessionRecord(root, selectionText) {
+    const sessionRoot = root && document.contains(root) ? root : findActiveChatWindow();
+    if (!sessionRoot) {
       const selection = markdown.normalizeWhitespace(selectionText);
       return selection ? {
         kind: "selection",
         message: selection,
         sourceUrl: location.href,
-        exportedAt: now,
+        exportedAt: new Date().toISOString(),
         links: []
       } : null;
     }
 
-    const messageNode = container.querySelector("[data-message-text], [data-message-content], [dir='auto']");
-    const message = markdown.normalizeWhitespace(messageNode ? visibleText(messageNode) : visibleText(container));
-    const timeNode = container.querySelector("time[datetime], time");
-    const sentAt = timeNode ? (timeNode.getAttribute("datetime") || visibleText(timeNode)) : "";
-    const sender = firstAttribute(
-      container,
-      ["[data-sender-name]", "[data-author-name]", "[aria-label*='sent by' i]", "[aria-label*='from ' i]"],
-      ["data-sender-name", "data-author-name", "aria-label"]
-    );
-    const links = Array.from(container.querySelectorAll("a[href]"))
-      .map((link) => ({ url: link.href, label: markdown.normalizeWhitespace(link.innerText || link.textContent) }))
-      .filter((link) => link.url);
+    const messages = findMessageNodes(sessionRoot).map(extractMessage).filter((record) => record.message);
+    const transcriptText = messages.length > 0 ? "" : visibleText(sessionRoot);
+    if (messages.length === 0 && !transcriptText) return null;
 
     return {
-      kind: "message",
-      message,
-      sender,
-      sentAt,
+      kind: "session",
+      title: detectSessionTitle(sessionRoot),
       sourceUrl: location.href,
-      exportedAt: now,
-      links
+      exportedAt: new Date().toISOString(),
+      messageCount: messages.length,
+      messages,
+      transcriptText
     };
   }
 
   function filenameFor(record) {
-    const label = record && record.sender ? `${record.sender}-` : "";
+    const title = record && record.title ? record.title : "google-chat-session";
     const stamp = new Date().toISOString().replace(/[.:]/g, "-").replace(/Z$/, "");
-    return `${markdown.sanitizeFilename(`google-chat-${label}${stamp}`)}.md`;
+    return `${markdown.sanitizeFilename(`${title}-${stamp}`)}.md`;
   }
 
   function showToast(message, isError) {
@@ -118,20 +209,21 @@
 
   document.addEventListener("contextmenu", (event) => {
     lastSelection = window.getSelection ? window.getSelection().toString() : "";
-    lastContextRecord = extractRecord(findMessageContainer(event.target), lastSelection);
+    lastContextRoot = findSessionRoot(event.target) || findActiveChatWindow();
   }, true);
 
   chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
     if (request && request.type === "GET_EXPORT_RECORD") {
-      const record = lastContextRecord || extractRecord(null, lastSelection);
+      const root = lastContextRoot && document.contains(lastContextRoot) ? lastContextRoot : findActiveChatWindow();
+      const record = extractSessionRecord(root, lastSelection);
       sendResponse(record ? {
         filename: filenameFor(record),
         markdown: markdown.recordToMarkdown(record)
-      } : { error: "No message or selected text was detected." });
+      } : { error: "No active Google Chat session was detected. Open a chat and right-click inside its window." });
       return false;
     }
     if (request && request.type === "EXPORT_RESULT") {
-      showToast(request.ok ? "Exported Markdown successfully." : (request.error || "Export failed."), !request.ok);
+      showToast(request.ok ? "Exported current Google Chat session successfully." : (request.error || "Export failed."), !request.ok);
     }
     return false;
   });

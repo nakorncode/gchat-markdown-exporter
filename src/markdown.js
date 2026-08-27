@@ -23,7 +23,50 @@
     return (cleaned || "google-chat-export").slice(0, 100);
   }
 
+  function uniqueLinks(links) {
+    return (Array.isArray(links) ? links : []).filter((link, index, all) => {
+      return link && link.url && all.findIndex((candidate) => candidate && candidate.url === link.url) === index;
+    });
+  }
+
+  function appendLinks(lines, links) {
+    const filteredLinks = uniqueLinks(links);
+    if (filteredLinks.length === 0) return;
+    lines.push("", "#### Links", "");
+    for (const link of filteredLinks) {
+      const label = escapeInline(link.label || link.url);
+      lines.push(`- [${label}](${link.url})`);
+    }
+  }
+
+  function sessionToMarkdown(session) {
+    const title = escapeInline(session && session.title ? session.title : "Google Chat session");
+    const lines = [`# ${title}`, ""];
+    if (session && session.sourceUrl) lines.push(`- Source: ${session.sourceUrl}`);
+    if (session && session.exportedAt) lines.push(`- Exported: ${session.exportedAt}`);
+    if (session && session.messageCount) lines.push(`- Messages captured: ${session.messageCount}`);
+    lines.push("", "## Messages", "");
+
+    const messages = Array.isArray(session && session.messages) ? session.messages : [];
+    if (messages.length > 0) {
+      messages.forEach((message, index) => {
+        const label = [message.sender, message.sentAt].filter(Boolean).join(" — ") || `Message ${index + 1}`;
+        lines.push(`### ${escapeInline(label)}`, "", normalizeWhitespace(message.message) || "(No visible message text was found.)");
+        appendLinks(lines, message.links);
+        lines.push("");
+      });
+    } else {
+      lines.push(normalizeWhitespace(session && session.transcriptText) || "(No visible chat content was found.)", "");
+    }
+
+    return `${lines.join("\n").replace(/\n{3,}/g, "\n\n").trim()}\n`;
+  }
+
   function recordToMarkdown(record) {
+    if (record && (record.kind === "session" || Array.isArray(record.messages))) {
+      return sessionToMarkdown(record);
+    }
+
     const message = normalizeWhitespace(record && record.message);
     const lines = ["# Google Chat message", ""];
 
@@ -42,13 +85,10 @@
 
     lines.push("", "## Message", "", message || "(No visible message text was found.)", "");
 
-    const links = Array.isArray(record && record.links) ? record.links : [];
-    const uniqueLinks = links.filter((link, index, all) => {
-      return link && link.url && all.findIndex((candidate) => candidate && candidate.url === link.url) === index;
-    });
-    if (uniqueLinks.length > 0) {
+    const links = uniqueLinks(record && record.links);
+    if (links.length > 0) {
       lines.push("## Links", "");
-      for (const link of uniqueLinks) {
+      for (const link of links) {
         const label = escapeInline(link.label || link.url);
         lines.push(`- [${label}](${link.url})`);
       }
@@ -62,7 +102,8 @@
     escapeInline,
     normalizeWhitespace,
     recordToMarkdown,
-    sanitizeFilename
+    sanitizeFilename,
+    sessionToMarkdown
   };
 
   root.GchatMarkdown = api;

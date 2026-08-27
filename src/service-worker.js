@@ -7,7 +7,7 @@ function registerContextMenu() {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
       id: MENU_ID,
-      title: "Export to Markdown",
+      title: "Export current Google Chat session to Markdown",
       contexts: ["page", "selection"],
       documentUrlPatterns: DOCUMENT_PATTERNS
     });

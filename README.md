@@ -1,15 +1,16 @@
 # Google Chat Markdown Exporter
 
-A small Manifest V3 Chrome extension that exports the visible Google Chat message under the cursor to a local `.md` file.
+A small Manifest V3 Chrome extension that exports the currently open Google Chat session to a local `.md` file.
 
 ## Usage
 
 1. Open Google Chat in Gmail or at `chat.google.com`.
-2. Right-click a message bubble.
-3. Choose **Export to Markdown**.
+2. Scroll manually until the messages you need are loaded.
+3. Right-click anywhere inside the active chat window.
+4. Choose **Export current Google Chat session to Markdown**.
 4. Find the Markdown file in Chrome's normal Downloads folder.
 
-If no message container is detected, select text first and use the same context-menu item as a fallback.
+The extension does not scroll for you. It captures the active chat root and all message-like content currently loaded inside it, not the whole Gmail page. Selected text is only a fallback when no active chat window can be detected.
 
 ## Install locally
 

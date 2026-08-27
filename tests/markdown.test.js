@@ -33,3 +33,23 @@ test("formats message metadata and links as Markdown", () => {
 test("uses a clear fallback when message text is empty", () => {
   assert.match(markdown.recordToMarkdown({ message: "" }), /No visible message text was found/);
 });
+
+test("formats a complete chat session with message boundaries", () => {
+  const result = markdown.recordToMarkdown({
+    kind: "session",
+    title: "Project channel",
+    sourceUrl: "https://mail.google.com/mail/u/0/#chat/home",
+    exportedAt: "2026-08-27T10:01:00Z",
+    messageCount: 2,
+    messages: [
+      { sender: "Alice", sentAt: "10:00", message: "First message", links: [] },
+      { sender: "Bob", sentAt: "10:01", message: "Second message", links: [] }
+    ]
+  });
+
+  assert.match(result, /# Project channel/);
+  assert.match(result, /Messages captured: 2/);
+  assert.match(result, /### Alice — 10:00/);
+  assert.match(result, /### Bob — 10:01/);
+  assert.ok(result.indexOf("First message") < result.indexOf("Second message"));
+});
