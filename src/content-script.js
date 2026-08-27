@@ -40,9 +40,13 @@
     const role = element.getAttribute("role") || "";
     const label = element.getAttribute("aria-label") || "";
     const messageCount = Math.min(element.querySelectorAll(MESSAGE_SELECTOR).length, 20);
+    const hasCjzxwdHint = element.classList.contains("CjZXwd") && element.querySelector("c-wiz");
+    const hasC61ChatChild = element.id === "c61" && element.querySelector(".CjZXwd c-wiz");
     let score = 0;
     if (element.id === "c61") score += 30;
     if (element.classList.contains("CjZXwd")) score += 25;
+    if (hasCjzxwdHint) score += 35;
+    if (hasC61ChatChild) score += 10;
     if (role === "main") score += 15;
     if (/chat|conversation|message/i.test(label)) score += 20;
     if (isScrollable(element)) score += 55;

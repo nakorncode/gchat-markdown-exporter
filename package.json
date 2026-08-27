@@ -5,5 +5,8 @@
   "description": "A local-only Chrome extension for exporting visible Google Chat messages to Markdown.",
   "scripts": {
     "test": "node --test"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
   }
 }
