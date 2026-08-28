@@ -6,6 +6,14 @@ const MENU_ID = "export-to-markdown";
 const DOCUMENT_PATTERNS = ["https://mail.google.com/*", "https://chat.google.com/*"];
 let menuRegistration = null;
 
+function base64ToBytes(value) {
+  if (typeof value !== "string") throw new Error("Attachment data was not returned.");
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
 function registerContextMenu() {
   if (menuRegistration) return menuRegistration;
 
@@ -49,11 +57,15 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     for (let index = 0; index < assets.length; index += 1) {
       const asset = assets[index];
       try {
-        const response = await fetch(asset.url, { credentials: "include", cache: "no-store" });
-        if (!response.ok) throw new Error("Attachment request failed.");
+        const response = await chrome.tabs.sendMessage(
+          tab.id,
+          { type: "FETCH_ATTACHMENT_BYTES", url: asset.url },
+          { frameId }
+        );
+        if (!response || !response.ok) throw new Error("Attachment request failed.");
         entries.push({
           name: `${archiveRoot}/${asset.path}`,
-          data: new Uint8Array(await response.arrayBuffer())
+          data: base64ToBytes(response.data)
         });
       } catch (_error) {
         throw new Error(`Could not fetch image ${index + 1}. The ZIP file was not created.`);

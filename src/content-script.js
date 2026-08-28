@@ -497,6 +497,16 @@
     };
   }
 
+  function arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+    }
+    return btoa(binary);
+  }
+
   function packageRecord(record) {
     const markdownFilename = filenameFor(record);
     const archiveRoot = markdownFilename.replace(/\.md$/i, "");
@@ -569,6 +579,21 @@
   }, true);
 
   chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+    if (request && request.type === "FETCH_ATTACHMENT_BYTES") {
+      const url = typeof request.url === "string" ? request.url : "";
+      if (!isChatImageAttachment(url)) {
+        sendResponse({ ok: false, error: "Unsupported Chat attachment." });
+        return false;
+      }
+      fetch(url, { credentials: "include", cache: "no-store" })
+        .then((response) => {
+          if (!response.ok) throw new Error("Attachment request failed.");
+          return response.arrayBuffer();
+        })
+        .then((buffer) => sendResponse({ ok: true, data: arrayBufferToBase64(buffer) }))
+        .catch(() => sendResponse({ ok: false, error: "Attachment fetch failed." }));
+      return true;
+    }
     if (request && request.type === "GET_EXPORT_RECORD") {
       const root = lastContextRoot && document.contains(lastContextRoot) ? lastContextRoot : findActiveChatWindow();
       const record = extractSessionRecord(root, lastSelection);
