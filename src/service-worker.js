@@ -2,16 +2,26 @@
 
 const MENU_ID = "export-to-markdown";
 const DOCUMENT_PATTERNS = ["https://mail.google.com/*", "https://chat.google.com/*"];
+let menuRegistration = null;
 
 function registerContextMenu() {
-  chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({
-      id: MENU_ID,
-      title: "Export current Google Chat session to Markdown",
-      contexts: ["page", "selection"],
-      documentUrlPatterns: DOCUMENT_PATTERNS
+  if (menuRegistration) return menuRegistration;
+
+  menuRegistration = new Promise((resolve) => {
+    chrome.contextMenus.removeAll(() => {
+      chrome.contextMenus.create({
+        id: MENU_ID,
+        title: "Export current Google Chat session to Markdown",
+        contexts: ["page", "selection"],
+        documentUrlPatterns: DOCUMENT_PATTERNS
+      });
+      resolve();
     });
+  }).finally(() => {
+    menuRegistration = null;
   });
+
+  return menuRegistration;
 }
 
 chrome.runtime.onInstalled.addListener(registerContextMenu);

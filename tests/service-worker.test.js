@@ -54,3 +54,30 @@ test("routes the export request and result toast to the frame that opened the me
     "chat-export/chat.md"
   ]);
 });
+
+test("does not create a duplicate menu when install and startup registration overlap", () => {
+  const listeners = { installed: null, startup: null };
+  const pendingRemovals = [];
+  const created = [];
+  const chrome = {
+    runtime: {
+      onInstalled: { addListener: (listener) => { listeners.installed = listener; } },
+      onStartup: { addListener: (listener) => { listeners.startup = listener; } }
+    },
+    contextMenus: {
+      removeAll: (callback) => { pendingRemovals.push(callback); },
+      create: (options) => { created.push(options); },
+      onClicked: { addListener: () => {} }
+    }
+  };
+  vm.runInNewContext(source, { chrome }, { filename: "service-worker.js" });
+
+  listeners.installed();
+  listeners.startup();
+  assert.equal(pendingRemovals.length, 1);
+
+  pendingRemovals[0]();
+
+  assert.equal(created.length, 1);
+  assert.equal(created[0].id, "export-to-markdown");
+});
