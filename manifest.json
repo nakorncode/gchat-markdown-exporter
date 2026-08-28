@@ -15,7 +15,7 @@
     "service_worker": "src/service-worker.js"
   },
   "action": {
-    "default_title": "Google Chat Markdown Exporter"
+    "default_title": "Google Chat ZIP Exporter"
   },
   "content_scripts": [
     {

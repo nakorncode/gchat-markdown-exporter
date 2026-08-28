@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 
+const zipSource = fs.readFileSync("src/zip.js", "utf8");
 const source = fs.readFileSync("src/service-worker.js", "utf8");
 
 test("routes the export request and result toast to the frame that opened the menu", async () => {
@@ -31,10 +32,13 @@ test("routes the export request and result toast to the frame that opened the me
       sendMessage: async (tabId, message, options) => {
         sent.push({ tabId, message, options });
         if (message.type === "GET_EXPORT_RECORD") return {
-          filename: "chat-export/chat.md",
+          filename: "chat-export.zip",
+          archiveRoot: "chat-export",
           markdown: "# Chat\n\n![Uploaded image](assets/image-001.png)\n",
+          reference: { attachments: [{ path: "assets/image-001.png" }] },
           assets: [{
-            filename: "chat-export/assets/image-001.png",
+            path: "assets/image-001.png",
+            contentType: "image/png",
             url: "https://example.test/attachment.png"
           }]
         };
@@ -42,17 +46,35 @@ test("routes the export request and result toast to the frame that opened the me
       }
     }
   };
-  vm.runInNewContext(source, { chrome }, { filename: "service-worker.js" });
+  const fetchRequests = [];
+  const fetch = async (url, options) => {
+    fetchRequests.push({ url, options });
+    return {
+    ok: true,
+    arrayBuffer: async () => new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer
+    };
+  };
+  vm.runInNewContext(zipSource + "\n" + source, {
+    chrome,
+    fetch,
+    importScripts: () => {},
+    TextEncoder,
+    Uint8Array,
+    DataView,
+    btoa: (value) => Buffer.from(value, "binary").toString("base64")
+  }, { filename: "service-worker.js" });
 
   await listeners.clicked({ menuItemId: "export-to-markdown", frameId: 7 }, { id: 42 });
 
   assert.equal(sent.length, 2);
   assert.equal(sent[0].options.frameId, 7);
   assert.equal(sent[1].options.frameId, 7);
-  assert.deepEqual(downloads.map((download) => download.filename), [
-    "chat-export/assets/image-001.png",
-    "chat-export/chat.md"
-  ]);
+  assert.equal(downloads.length, 1);
+  assert.equal(downloads[0].filename, "chat-export.zip");
+  assert.match(downloads[0].url, /^data:application\/zip;base64,/);
+  assert.equal(fetchRequests.length, 1);
+  assert.equal(fetchRequests[0].options.credentials, "include");
+  assert.equal(fetchRequests[0].options.cache, "no-store");
 });
 
 test("does not create a duplicate menu when install and startup registration overlap", () => {
@@ -70,7 +92,7 @@ test("does not create a duplicate menu when install and startup registration ove
       onClicked: { addListener: () => {} }
     }
   };
-  vm.runInNewContext(source, { chrome }, { filename: "service-worker.js" });
+  vm.runInNewContext(source, { chrome, importScripts: () => {} }, { filename: "service-worker.js" });
 
   listeners.installed();
   listeners.startup();

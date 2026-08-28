@@ -1,5 +1,7 @@
 "use strict";
 
+importScripts("zip.js");
+
 const MENU_ID = "export-to-markdown";
 const DOCUMENT_PATTERNS = ["https://mail.google.com/*", "https://chat.google.com/*"];
 let menuRegistration = null;
@@ -11,7 +13,7 @@ function registerContextMenu() {
     chrome.contextMenus.removeAll(() => {
       chrome.contextMenus.create({
         id: MENU_ID,
-        title: "Export current Google Chat session to Markdown",
+        title: "Export current Google Chat session to ZIP",
         contexts: ["page", "selection"],
         documentUrlPatterns: DOCUMENT_PATTERNS
       });
@@ -35,22 +37,30 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     const result = await chrome.tabs.sendMessage(tab.id, { type: "GET_EXPORT_RECORD" }, { frameId });
     if (!result || result.error) throw new Error(result && result.error ? result.error : "No exportable message found.");
 
+    const archiveRoot = result.archiveRoot || result.filename.replace(/\.zip$/i, "");
+    const entries = [
+      { name: `${archiveRoot}/${archiveRoot}.md`, data: result.markdown || "" },
+      {
+        name: `${archiveRoot}/attachments.json`,
+        data: JSON.stringify(result.reference || { schemaVersion: 1, attachments: [] }, null, 2)
+      }
+    ];
     const assets = Array.isArray(result.assets) ? result.assets : [];
     for (let index = 0; index < assets.length; index += 1) {
       const asset = assets[index];
       try {
-        await chrome.downloads.download({
-          url: asset.url,
-          filename: asset.filename,
-          saveAs: false,
-          conflictAction: "uniquify"
+        const response = await fetch(asset.url, { credentials: "include", cache: "no-store" });
+        if (!response.ok) throw new Error("Attachment request failed.");
+        entries.push({
+          name: `${archiveRoot}/${asset.path}`,
+          data: new Uint8Array(await response.arrayBuffer())
         });
       } catch (_error) {
-        throw new Error(`Could not download image ${index + 1}. The Markdown file was not created.`);
+        throw new Error(`Could not fetch image ${index + 1}. The ZIP file was not created.`);
       }
     }
 
-    const downloadUrl = `data:text/markdown;charset=utf-8,${encodeURIComponent(result.markdown)}`;
+    const downloadUrl = GchatZip.toDataUrl(GchatZip.createZip(entries));
     await chrome.downloads.download({
       url: downloadUrl,
       filename: result.filename,

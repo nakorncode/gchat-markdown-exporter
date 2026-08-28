@@ -316,7 +316,8 @@
         alt: markdown.normalizeWhitespace(image.getAttribute("alt") || image.getAttribute("aria-label") || "Image"),
         url: image.currentSrc || image.src || ""
       }))
-      .filter((image) => isChatImageAttachment(image.url));
+      .filter((image) => isChatImageAttachment(image.url))
+      .map((image) => ({ ...image, url: fullResolutionUrl(image.url) }));
   }
 
   function isChatImageAttachment(url) {
@@ -347,6 +348,20 @@
     try {
       const parsed = new URL(url);
       return parsed.searchParams.get("attachment_token") || url;
+    } catch (_ignored) {
+      return url;
+    }
+  }
+
+  function fullResolutionUrl(url) {
+    if (!isChatImageAttachment(url)) return url;
+    try {
+      const parsed = new URL(url);
+      const size = parsed.searchParams.get("sz") || "";
+      const widthMatch = size.match(/(?:^|-)w(\d+)/i);
+      const width = widthMatch ? Number(widthMatch[1]) : 0;
+      if (width < 2048) parsed.searchParams.set("sz", "w2560-h2560-rw");
+      return parsed.toString();
     } catch (_ignored) {
       return url;
     }
@@ -456,37 +471,80 @@
     return `${markdown.sanitizeFilename(`${title}-${stamp}`)}.md`;
   }
 
+  function imageContentType(url) {
+    try {
+      const contentType = new URL(url).searchParams.get("content_type") || "";
+      if (/^image\/[a-z0-9.+-]+$/i.test(contentType)) return contentType.toLowerCase();
+    } catch (_ignored) {
+      // The extension fallback below is sufficient for a local reference.
+    }
+    return `image/${imageExtension(url) === "jpg" ? "jpeg" : imageExtension(url)}`;
+  }
+
+  function buildReference(record, assets) {
+    return {
+      schemaVersion: 1,
+      title: record && record.title ? record.title : "",
+      sourceUrl: record && record.sourceUrl ? record.sourceUrl : "",
+      exportedAt: record && record.exportedAt ? record.exportedAt : "",
+      messageCount: record && Number.isInteger(record.messageCount) ? record.messageCount : 0,
+      attachments: assets.map((asset) => ({
+        path: asset.path,
+        displayName: asset.displayName,
+        contentType: asset.contentType,
+        messageIndexes: asset.messageIndexes
+      }))
+    };
+  }
+
   function packageRecord(record) {
-    const filename = filenameFor(record);
+    const markdownFilename = filenameFor(record);
+    const archiveRoot = markdownFilename.replace(/\.md$/i, "");
+    const filename = `${archiveRoot}.zip`;
     if (!record || !Array.isArray(record.messages)) {
-      return { filename, markdown: markdown.recordToMarkdown(record), assets: [] };
+      return {
+        filename,
+        archiveRoot,
+        markdown: markdown.recordToMarkdown(record),
+        assets: [],
+        reference: buildReference(record, [])
+      };
     }
 
-    const bundleName = filename.replace(/\.md$/i, "");
     const assetByIdentity = new Map();
     const assets = [];
-    const messages = record.messages.map((message) => ({
+    const messages = record.messages.map((message, messageIndex) => ({
       ...message,
       images: (Array.isArray(message.images) ? message.images : []).map((image) => {
         if (!image || !image.url) return image;
-        const identity = imageIdentity(image.url);
+        const url = fullResolutionUrl(image.url);
+        const identity = imageIdentity(url);
         let asset = assetByIdentity.get(identity);
         if (!asset) {
           const ordinal = String(assets.length + 1).padStart(3, "0");
-          const path = `assets/image-${ordinal}.${imageExtension(image.url)}`;
-          asset = { url: image.url, path, filename: `${bundleName}/${path}` };
+          const path = `assets/image-${ordinal}.${imageExtension(url)}`;
+          asset = {
+            url,
+            path,
+            displayName: image.alt || `image-${ordinal}`,
+            contentType: imageContentType(url),
+            messageIndexes: []
+          };
           assetByIdentity.set(identity, asset);
           assets.push(asset);
         }
+        if (!asset.messageIndexes.includes(messageIndex + 1)) asset.messageIndexes.push(messageIndex + 1);
         return { ...image, path: asset.path };
       })
     }));
     const packagedRecord = { ...record, messages };
 
     return {
-      filename: assets.length > 0 ? `${bundleName}/${filename}` : filename,
+      filename,
+      archiveRoot,
       markdown: markdown.recordToMarkdown(packagedRecord),
-      assets
+      assets,
+      reference: buildReference(record, assets)
     };
   }
 
@@ -518,7 +576,7 @@
       return false;
     }
     if (request && request.type === "EXPORT_RESULT") {
-      showToast(request.ok ? "Exported current Google Chat session successfully." : (request.error || "Export failed."), !request.ok);
+      showToast(request.ok ? "Exported current Google Chat session ZIP successfully." : (request.error || "Export failed."), !request.ok);
     }
     return false;
   });

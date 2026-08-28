@@ -180,7 +180,9 @@ test("uses the live Chat body wrapper instead of its data-message-id sender desc
   assert.match(response.markdown, /> Quoted reply content/);
   assert.match(response.markdown, /!\[Uploaded image\]\(assets\/image-001\.png\)/);
   assert.equal(response.assets.length, 1);
-  assert.match(response.assets[0].filename, /\/assets\/image-001\.png$/);
+  assert.equal(response.filename.endsWith(".zip"), true);
+  assert.equal(response.assets[0].path, "assets/image-001.png");
+  assert.match(response.assets[0].url, /[?&]sz=w2560-h2560-rw/);
   assert.doesNotMatch(response.markdown, /\nAlice\n/);
 });
 
