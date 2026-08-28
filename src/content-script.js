@@ -573,12 +573,51 @@
     window.setTimeout(() => toast.remove(), 3500);
   }
 
+  function showProgressToast(message, current, total) {
+    let toast = document.getElementById("gchat-markdown-exporter-toast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "gchat-markdown-exporter-toast";
+      toast.setAttribute("role", "status");
+      toast.setAttribute("aria-live", "polite");
+      toast.style.cssText = [
+        "position:fixed", "z-index:2147483647", "right:20px", "bottom:20px", "width:280px", "padding:12px 14px",
+        "border-radius:8px", "font:14px/1.4 sans-serif", "color:#fff", "background:#1f2937",
+        "box-shadow:0 2px 12px rgba(0,0,0,.25)"
+      ].join(";");
+
+      const status = document.createElement("div");
+      status.className = "gchat-markdown-exporter-status";
+      const track = document.createElement("div");
+      track.className = "gchat-markdown-exporter-progress-track";
+      track.style.cssText = "height:4px;margin-top:8px;overflow:hidden;border-radius:4px;background:rgba(255,255,255,.24)";
+      const fill = document.createElement("div");
+      fill.className = "gchat-markdown-exporter-progress-fill";
+      fill.style.cssText = "height:100%;width:12%;border-radius:4px;background:#8ab4f8;transition:width .2s ease";
+      track.appendChild(fill);
+      toast.append(status, track);
+      document.documentElement.appendChild(toast);
+    }
+
+    const status = toast.querySelector(".gchat-markdown-exporter-status");
+    const fill = toast.querySelector(".gchat-markdown-exporter-progress-fill");
+    if (status) status.textContent = message || "Exporting Google Chat session...";
+    if (fill) {
+      const progress = total > 0 ? Math.max(0, Math.min(100, (current / total) * 100)) : 12;
+      fill.style.width = `${progress}%`;
+    }
+  }
+
   document.addEventListener("contextmenu", (event) => {
     lastSelection = window.getSelection ? window.getSelection().toString() : "";
     lastContextRoot = findSessionRoot(event.target) || findActiveChatWindow();
   }, true);
 
   chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+    if (request && request.type === "EXPORT_PROGRESS") {
+      showProgressToast(request.message, Number(request.current) || 0, Number(request.total) || 0);
+      return false;
+    }
     if (request && request.type === "FETCH_ATTACHMENT_BYTES") {
       const url = typeof request.url === "string" ? request.url : "";
       if (!isChatImageAttachment(url)) {

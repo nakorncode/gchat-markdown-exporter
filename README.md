@@ -10,6 +10,8 @@ A small Manifest V3 Chrome extension that exports the currently open Google Chat
 4. Choose **Export current Google Chat session to ZIP**.
 5. Find the ZIP file in Chrome's normal Downloads folder.
 
+During export, a progress toast stays visible in the active Chat frame and reports preparation, each attachment download, ZIP creation, and the final result. The toast is best effort and does not change the captured message scope.
+
 The extension does not scroll for you. It captures the active chat root and all message-like content currently loaded inside it, not the whole Gmail page. Selected text is only a fallback when no active chat window can be detected.
 
 The content script runs in matching child frames because Gmail-integrated Google Chat may place the conversation UI in a frame. The context-menu click's frame is used for the export request, so the top Gmail document cannot incorrectly report that no chat is open.

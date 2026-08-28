@@ -14,6 +14,19 @@ function base64ToBytes(value) {
   return bytes;
 }
 
+async function sendProgress(tabId, frameId, message, current, total) {
+  try {
+    await chrome.tabs.sendMessage(tabId, {
+      type: "EXPORT_PROGRESS",
+      message,
+      current,
+      total
+    }, { frameId });
+  } catch (_ignored) {
+    // Progress UI is best effort; export should continue if the page changes.
+  }
+}
+
 function registerContextMenu() {
   if (menuRegistration) return menuRegistration;
 
@@ -42,6 +55,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const frameId = typeof info.frameId === "number" ? info.frameId : 0;
 
   try {
+    await sendProgress(tab.id, frameId, "Preparing Google Chat data...", 0, 0);
     const result = await chrome.tabs.sendMessage(tab.id, { type: "GET_EXPORT_RECORD" }, { frameId });
     if (!result || result.error) throw new Error(result && result.error ? result.error : "No exportable message found.");
 
@@ -54,8 +68,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       }
     ];
     const assets = Array.isArray(result.assets) ? result.assets : [];
+    await sendProgress(tab.id, frameId, "Preparing ZIP export...", 0, assets.length);
     for (let index = 0; index < assets.length; index += 1) {
       const asset = assets[index];
+      await sendProgress(tab.id, frameId, `Downloading image ${index + 1} of ${assets.length}...`, index, assets.length);
       try {
         const response = await chrome.tabs.sendMessage(
           tab.id,
@@ -70,8 +86,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       } catch (_error) {
         throw new Error(`Could not fetch image ${index + 1}. The ZIP file was not created.`);
       }
+      await sendProgress(tab.id, frameId, `Downloaded image ${index + 1} of ${assets.length}.`, index + 1, assets.length);
     }
 
+    await sendProgress(tab.id, frameId, "Building ZIP export...", assets.length, Math.max(assets.length, 1));
     const downloadUrl = GchatZip.toDataUrl(GchatZip.createZip(entries));
     await chrome.downloads.download({
       url: downloadUrl,

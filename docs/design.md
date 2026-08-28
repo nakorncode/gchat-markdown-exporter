@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft v0.2 — session export design.
+Draft v0.3 — session export design.
 
 ## Feasibility
 
@@ -34,6 +34,7 @@ The context-menu API does not provide an arbitrary DOM element to the service wo
 8. Fetch visible Google Chat image attachments into local `assets/` files and use relative paths in Markdown; do not write attachment tokens to the Markdown or JSON reference output.
 9. Request a `w2560-h2560-rw` image rendition when the visible source is thumbnail-sized, while preserving already-large size hints.
 10. Package the Markdown, safe attachment reference metadata, and asset bytes into one local ZIP.
+11. Show export progress in the active Chat frame while the ZIP is being prepared.
 
 ## Known limitations
 
@@ -78,6 +79,7 @@ The semantic and class-based paths are covered by redacted DOM fixtures. A live 
 
 - Right-clicking anywhere inside an active Gmail Chat session shows `Export current Google Chat session to ZIP`.
 - Selecting the item downloads one readable ZIP containing the `.md` file and, when applicable, local image assets through the browser's normal download flow.
+- While export is running, the active Chat frame shows a persistent status toast with determinate attachment progress when assets are present.
 - The export contains all message-like content currently loaded in the selected chat root and preserves basic links.
 - Exporting selected text works only as a fallback when no chat session is detected.
 - The extension remains usable after Gmail's SPA navigation and dynamic DOM updates.

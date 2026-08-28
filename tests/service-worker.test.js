@@ -59,15 +59,13 @@ test("routes the export request and result toast to the frame that opened the me
 
   await listeners.clicked({ menuItemId: "export-to-markdown", frameId: 7 }, { id: 42 });
 
-  assert.equal(sent.length, 3);
-  assert.equal(sent[0].options.frameId, 7);
-  assert.equal(sent[1].options.frameId, 7);
-  assert.equal(sent[2].options.frameId, 7);
+  assert.equal(sent.filter((entry) => entry.message.type === "EXPORT_PROGRESS").length, 5);
+  assert.equal(sent.find((entry) => entry.message.type === "GET_EXPORT_RECORD").options.frameId, 7);
+  assert.equal(sent.find((entry) => entry.message.type === "FETCH_ATTACHMENT_BYTES").options.frameId, 7);
+  assert.equal(sent.find((entry) => entry.message.type === "EXPORT_RESULT").options.frameId, 7);
   assert.equal(downloads.length, 1);
   assert.equal(downloads[0].filename, "chat-export.zip");
   assert.match(downloads[0].url, /^data:application\/zip;base64,/);
-  assert.equal(sent[1].message.type, "FETCH_ATTACHMENT_BYTES");
-  assert.equal(sent[1].options.frameId, 7);
 });
 
 test("does not create a duplicate menu when install and startup registration overlap", () => {
