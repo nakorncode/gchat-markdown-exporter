@@ -306,7 +306,11 @@
 
   function extractImages(element) {
     if (!element) return [];
-    return Array.from(element.querySelectorAll("img:not([data-emoji])"))
+    const attachmentImages = Array.from(element.querySelectorAll("[role='button'][data-action='7'] img:not([data-emoji])"));
+    const candidates = attachmentImages.length > 0
+      ? attachmentImages
+      : Array.from(element.querySelectorAll("img.HQLhSc:not([data-emoji])"));
+    return candidates
       .filter((image) => !image.closest("[aria-hidden='true']"))
       .map((image) => ({
         alt: markdown.normalizeWhitespace(image.getAttribute("alt") || image.getAttribute("aria-label") || "Image"),
@@ -339,6 +343,15 @@
     return "img";
   }
 
+  function imageIdentity(url) {
+    try {
+      const parsed = new URL(url);
+      return parsed.searchParams.get("attachment_token") || url;
+    } catch (_ignored) {
+      return url;
+    }
+  }
+
   function extractQuotes(element) {
     const candidates = selectorMatches(element, "[data-is-same-group-quote], [data-can-navigate-to-original-message]");
     const selected = [];
@@ -367,7 +380,7 @@
       sender,
       sentAt,
       links: extractLinks(body && body.element),
-      images: extractImages(body && body.element),
+      images: extractImages(node),
       quotes: extractQuotes(node)
     };
   }
@@ -450,18 +463,19 @@
     }
 
     const bundleName = filename.replace(/\.md$/i, "");
-    const assetByUrl = new Map();
+    const assetByIdentity = new Map();
     const assets = [];
     const messages = record.messages.map((message) => ({
       ...message,
       images: (Array.isArray(message.images) ? message.images : []).map((image) => {
         if (!image || !image.url) return image;
-        let asset = assetByUrl.get(image.url);
+        const identity = imageIdentity(image.url);
+        let asset = assetByIdentity.get(identity);
         if (!asset) {
           const ordinal = String(assets.length + 1).padStart(3, "0");
           const path = `assets/image-${ordinal}.${imageExtension(image.url)}`;
           asset = { url: image.url, path, filename: `${bundleName}/${path}` };
-          assetByUrl.set(image.url, asset);
+          assetByIdentity.set(identity, asset);
           assets.push(asset);
         }
         return { ...image, path: asset.path };

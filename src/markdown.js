@@ -54,8 +54,9 @@
 
   function appendImages(lines, images) {
     const uniqueImages = (Array.isArray(images) ? images : []).filter((image, index, all) => {
+      const key = image && (image.path || image.url);
       return image && (image.path || /^https?:\/\//i.test(image.url || ""))
-        && all.findIndex((candidate) => candidate && candidate.url === image.url) === index;
+        && all.findIndex((candidate) => candidate && (candidate.path || candidate.url) === key) === index;
     });
     if (uniqueImages.length === 0) return;
     lines.push("", "#### Images", "");

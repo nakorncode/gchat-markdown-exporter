@@ -147,7 +147,10 @@ test("uses the live Chat body wrapper instead of its data-message-id sender desc
             <div class="DTp27d QIJiHb Zc1Emd">
               Actual message body <img class="iiJ4W" data-emoji="true" aria-label="🙂">
               <a href="https://example.com/docs">Docs</a>
-              <img src="https://chat.google.com/u/0/api/get_attachment_url?content_type=image%2Fpng&amp;attachment_token=fixture" alt="Uploaded image">
+              <div role="button" data-action="7" aria-label="Image, image.png." title="image.png">
+                <img class="HQLhSc" src="https://chat.google.com/u/0/api/get_attachment_url?content_type=image%2Fpng&amp;attachment_token=fixture" alt="Uploaded image">
+                <img class="HQLhSc" src="https://chat.google.com/u/0/api/get_attachment_url?content_type=image%2Fpng&amp;attachment_token=fixture&amp;sz=w1024" alt="Uploaded image preview">
+              </div>
             </div>
             <div data-is-same-group-quote="true">Quoted reply content</div>
           </div>
