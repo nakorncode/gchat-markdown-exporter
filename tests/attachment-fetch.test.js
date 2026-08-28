@@ -14,11 +14,15 @@ test("fetches a Chat attachment in the signed-in content frame", async () => {
     runScripts: "outside-only"
   });
   const listeners = [];
+  let fetchOptions;
   dom.window.chrome = { runtime: { onMessage: { addListener: (listener) => listeners.push(listener) } } };
-  dom.window.fetch = async () => ({
+  dom.window.fetch = async (_url, options) => {
+    fetchOptions = options;
+    return {
     ok: true,
     arrayBuffer: async () => new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer
-  });
+    };
+  };
   vm.runInContext(markdownSource, dom.getInternalVMContext(), { filename: "markdown.js" });
   vm.runInContext(contentSource, dom.getInternalVMContext(), { filename: "content-script.js" });
 
@@ -31,6 +35,7 @@ test("fetches a Chat attachment in the signed-in content frame", async () => {
   dom.window.close();
 
   assert.equal(returned, true);
+  assert.equal(fetchOptions.credentials, "same-origin");
   assert.equal(response.ok, true);
   assert.equal(response.data, "iVBORw==");
 });

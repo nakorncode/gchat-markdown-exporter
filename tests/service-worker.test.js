@@ -42,7 +42,7 @@ test("routes the export request and result toast to the frame that opened the me
             url: "https://example.test/attachment.png"
           }]
         };
-        if (message.type === "FETCH_ATTACHMENT_BYTES") return { ok: true, data: "iVBORw0KGgo=" };
+        if (message.type === "FETCH_ATTACHMENT_BYTES") return { ok: true, data: "iVBORw==" };
         return undefined;
       }
     }

@@ -585,7 +585,7 @@
         sendResponse({ ok: false, error: "Unsupported Chat attachment." });
         return false;
       }
-      fetch(url, { credentials: "include", cache: "no-store" })
+      fetch(url, { credentials: "same-origin", cache: "no-store" })
         .then((response) => {
           if (!response.ok) throw new Error("Attachment request failed.");
           return response.arrayBuffer();
